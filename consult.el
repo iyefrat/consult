@@ -490,6 +490,9 @@ Size of private unicode plane b.")
 (defvar-local consult--focus-lines-overlays nil
   "Overlays used by `consult-focus-lines'.")
 
+(defvar consult--crm-selected-cands nil
+  "The current selected candidates in a `consult-completing-read-multiple' session.")
+
 ;;;; Customization helper
 
 (defun consult--customize-set (cmds prop val)
@@ -2414,7 +2417,7 @@ See `completing-read-multiple' for the documentation of the arguments."
                      (`(,sym . ,_) sym) ;; ignore history position
                      (_ hist)))
          (hist-val (symbol-value hist-sym))
-         (selected
+         (consult--crm-selected-cands
           (and initial-input
                (or
                 ;; initial-input is multiple items
@@ -2425,9 +2428,9 @@ See `completing-read-multiple' for the documentation of the arguments."
                    (mapcar format-item
                            (split-string initial-input separator 'omit-nulls))
                  (setq initial-input nil))))
-         (consult--crm-history (append (mapcar #'substring-no-properties selected) hist-val))
-         (items (append selected
-                        (seq-remove (lambda (x) (member x selected))
+         (consult--crm-history (append (mapcar #'substring-no-properties consult--crm-selected-cands) hist-val))
+         (items (append consult--crm-selected-cands
+                        (seq-remove (lambda (x) (member x consult--crm-selected-cands))
                                     orig-items)))
          (orig-md (and (functionp table) (cdr (funcall table "" nil 'metadata))))
          (group-fun (alist-get 'group-function orig-md))
@@ -2439,8 +2442,8 @@ See `completing-read-multiple' for the documentation of the arguments."
                `((,sort . ,(lambda (cands)
                              (setq cands (funcall sort cands))
                              (nconc
-                              (seq-filter (lambda (x) (member x selected)) cands)
-                              (seq-remove (lambda (x) (member x selected)) cands)))))))))
+                              (seq-filter (lambda (x) (member x consult--crm-selected-cands)) cands)
+                              (seq-remove (lambda (x) (member x consult--crm-selected-cands)) cands)))))))))
          (md
           `(metadata
             (group-function
@@ -2471,19 +2474,19 @@ See `completing-read-multiple' for the documentation of the arguments."
                  (let ((item (minibuffer-contents-no-properties)))
                    (when (equal item "")
                      (throw 'exit nil))
-                   (setq selected (if (member item selected)
+                   (setq consult--crm-selected-cands (if (member item consult--crm-selected-cands)
                                       ;; Multi selections are not possible.
                                       ;; This is probably no problem, since this is rarely desired.
-                                      (delete item selected)
-                                    (nconc selected (list (funcall format-item item))))
-                         consult--crm-history (append (mapcar #'substring-no-properties selected) hist-val)
-                         items (append selected
-                                       (seq-remove (lambda (x) (member x selected))
+                                      (delete item consult--crm-selected-cands)
+                                    (nconc consult--crm-selected-cands (list (funcall format-item item))))
+                         consult--crm-history (append (mapcar #'substring-no-properties consult--crm-selected-cands) hist-val)
+                         items (append consult--crm-selected-cands
+                                       (seq-remove (lambda (x) (member x consult--crm-selected-cands))
                                                    orig-items)))
                    (when overlay
                      (overlay-put overlay 'display
-                                  (when selected
-                                    (format " (%s selected): " (length selected)))))
+                                  (when consult--crm-selected-cands
+                                    (format " (%s selected): " (length consult--crm-selected-cands)))))
                    (delete-minibuffer-contents)
                    (run-hook-with-args 'consult--completion-refresh-hook 'reset))))
               ('consult--continue nil)
@@ -2496,8 +2499,8 @@ See `completing-read-multiple' for the documentation of the arguments."
          (lambda ()
            (when-let (pos (string-match-p "\\(?: (default[^)]+)\\)?: \\'" prompt))
              (setq overlay (make-overlay (+ (point-min) pos) (+ (point-min) (length prompt))))
-             (when selected
-               (overlay-put overlay 'display (format " (%s selected): " (length selected)))))
+             (when consult--crm-selected-cands
+               (overlay-put overlay 'display (format " (%s selected): " (length consult--crm-selected-cands)))))
            (use-local-map (make-composed-keymap (list consult-crm-map) (current-local-map)))))
       (unwind-protect
           (progn
@@ -2515,17 +2518,17 @@ See `completing-read-multiple' for the documentation of the arguments."
                     'consult--crm-history
                     "" ;; default
                     inherit-input-method)))
-              (unless (or (equal result "") selected)
-                (setq selected (split-string result separator 'omit-nulls)
-                      consult--crm-history (append (mapcar #'substring-no-properties selected) hist-val)))))
+              (unless (or (equal result "") consult--crm-selected-cands)
+                (setq consult--crm-selected-cands (split-string result separator 'omit-nulls)
+                      consult--crm-history (append (mapcar #'substring-no-properties consult--crm-selected-cands) hist-val)))))
         (remove-hook 'pre-command-hook hook)))
     (when (consp def)
       (setq def (car def)))
-    (if (and def (not (equal "" def)) (not selected))
+    (if (and def (not (equal "" def)) (not consult--crm-selected-cands))
         (split-string def separator 'omit-nulls)
-      (setq selected (mapcar #'substring-no-properties selected))
-      (set hist-sym (append selected (symbol-value hist-sym)))
-      selected)))
+      (setq consult--crm-selected-cands (mapcar #'substring-no-properties consult--crm-selected-cands))
+      (set hist-sym (append consult--crm-selected-cands (symbol-value hist-sym)))
+      consult--crm-selected-cands)))
 
 ;;;; Commands
 
